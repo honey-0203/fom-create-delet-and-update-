@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HubSpot Contact Form</title>
+</head>
+<style>
+  form#contact-form {
+    display: inline-grid;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .contaniner {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    margin: auto;
+  }
+
+  input[type="submit"] {
+    background: black;
+    color: white;
+  }
+
+  input {
+    width: 177%;
+    border-radius: 10px;
+    height: 45px;
+  }
+
+  h1 {
+    text-align: center;
+  }
+
+  .contact {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .delete-btn, .update-btn {
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+    margin-right: 5px;
+  }
+
+  .update-btn {
+    background-color: #00b894;
+  }
+</style>
+
+<body>
+  <div class="contaniner">
+    <div class="main-container">
+      <h1>Contact</h1>
+      <form id="contact-form">
+        Name <input type="text" id="name" required>
+        Last-Name <input type="text" id="last" required>
+        Email <input type="email" id="email" required>
+        Contact <input type="text" id="contact" required>
+        Password <input type="text" id="password" required>
+        <input type="submit" value="Submit your data">
+      </form>
+    </div>
+  </div>
+
+  <div id="custom-alert" style="display:none; background-color: #2d2d2d; color: #00ff88; padding: 15px; border-radius: 10px; max-width: 300px; margin: 20px auto; text-align: center; font-family: sans-serif;"></div>
+
+  <div id="custom-warning" style="display:none; background-color: #ff4444; color: white; padding: 15px; border-radius: 10px; max-width: 300px; margin: 20px auto; text-align: center; font-family: sans-serif;"></div>
+
+  <h2 style="text-align:center;">HubSpot Contacts</h2>
+  <div id="contacts-list" style="max-width:600px; margin:auto; font-family:sans-serif;"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script>
+    const form = document.getElementById('contact-form');
+    const customAlert = document.getElementById('custom-alert');
+    const customWarning = document.getElementById('custom-warning');
+    const submittedEntries = [];
+    let isEditing = false;
+    let editingEmail = '';
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      const name = document.getElementById('name').value.trim();
+      const last = document.getElementById('last').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const contact = document.getElementById('contact').value.trim();
+      const password = document.getElementById('password').value;
+
+      const entry = { name, last, email, contact };
+
+      if (!isEditing) {
+        const isDuplicate = submittedEntries.some(e =>
+          e.name === name &&
+          e.last === last &&
+          e.email === email &&
+          e.contact === contact
+        );
+
+        if (isDuplicate) {
+          showWarning("Duplicate details found locally.");
+          return;
+        }
+      }
+
+      axios.post('http://localhost:8002/submit', {
+        name, last, contact, password, email
+      })
+        .then(res => {
+          const message = res.data.message || "Submitted!";
+          showSuccess("✅ " + message);
+
+          if (!isEditing) submittedEntries.push(entry);
+
+          form.reset();
+          isEditing = false;
+          editingEmail = '';
+        })
+        .catch(err => {
+          if (err.response) {
+            if (err.response.status === 409) {
+              showWarning("Duplicate exists on server.");
+            } else {
+              showWarning("Error: " + (err.response.data?.message || err.response.statusText));
+            }
+          } else {
+            showWarning("Server not responding.");
+          }
+        });
+    });
+
+    function showSuccess(message) {
+      customAlert.textContent = message;
+      customAlert.style.display = "block";
+      customWarning.style.display = "none";
+      setTimeout(() => customAlert.style.display = "none", 3000);
+      loadContacts();
+    }
+
+    function showWarning(message) {
+      customWarning.textContent = message;
+      customWarning.style.display = "block";
+      customAlert.style.display = "none";
+      setTimeout(() => customWarning.style.display = "none", 4000);
+    }
+
+    function loadContacts() {
+      axios.get('http://localhost:8002/contacts')
+        .then(response => {
+          const contacts = response.data;
+          const container = document.getElementById('contacts-list');
+          container.innerHTML = '';
+
+          if (contacts.length === 0) {
+            container.innerHTML = '<p>No contacts found.</p>';
+            return;
+          }
+
+          contacts.forEach(contact => {
+            const div = document.createElement('div');
+            div.classList.add('contact');
+            div.innerHTML = `
+              <strong>${contact.firstname} ${contact.lastname}</strong><br>
+              📧 ${contact.email}<br>
+              📞 ${contact.phone || 'N/A'}<br>
+              <button class="delete-btn" onclick="deleteContact('${contact.id}')">Delete</button>
+              <button class="update-btn" onclick="fillForm('${contact.firstname}', '${contact.lastname}', '${contact.email}', '${contact.phone || ''}')">Update</button>
+            `;
+            container.appendChild(div);
+          });
+        })
+        .catch(error => {
+          console.error('Error loading contacts:', error.message);
+        });
+    }
+
+    function deleteContact(contactId) {
+      axios.get(`http://localhost:8002/contact/${contactId}`)
+        .then(() => {
+          showSuccess("Contact deleted.");
+          loadContacts();
+        })
+        .catch(error => {
+          console.error('Error deleting contact:', error.message);
+          showWarning("Delete failed.");
+        });
+    }
+
+    function fillForm(firstname, lastname, email, phone) {
+      document.getElementById('name').value = firstname;
+      document.getElementById('last').value = lastname;
+      document.getElementById('email').value = email;
+      document.getElementById('contact').value = phone;
+      document.getElementById('password').value = 'updated-pass';
+
+      isEditing = true;
+      editingEmail = email;
+
+      showSuccess("Form filled. You can update and submit.");
+    }
+
+    window.onload = loadContacts;
+  </script>
+</body>
+
+</html>
