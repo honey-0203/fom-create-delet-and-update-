@@ -5,7 +5,7 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = 8002;
 
-const HUBSPOT_TOKEN = 'pat-na1-ef3d6cc1-021e-40c5-b85e-1f6af9bd4331';
+const HUBSPOT_TOKEN = 'added token';
 
 app.use(cors());
 app.use(bodyParser.json());
